@@ -1,0 +1,108 @@
+// Smart Water Valve — Prisma schema
+// Postgres (Neon/Vercel). See .env.example for DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ServiceType {
+  COMMERCIAL
+  RESIDENTIAL
+}
+
+enum NotificationType {
+  FILTER_DUE
+  FILTER_WARNING
+}
+
+/// A linked Tuya / Smart Life account. The Cloud Project access/secret keys
+/// live in env vars (one cloud project); each account is a linked app-account UID.
+model TuyaAccount {
+  id        String   @id @default(cuid())
+  label     String
+  uid       String   @unique
+  region    String   @default("us") // us | eu | cn | in
+  createdAt DateTime @default(now())
+  devices   Device[]
+}
+
+model Customer {
+  id           String      @id @default(cuid())
+  name         String
+  type         ServiceType @default(RESIDENTIAL)
+  address      String?
+  contactName  String?
+  contactPhone String? // E.164 for SMS, e.g. +14155551234
+  createdAt    DateTime    @default(now())
+  devices      Device[]
+}
+
+model Device {
+  id          String    @id // Tuya device id
+  name        String
+  productName String?
+  online      Boolean   @default(false)
+  batteryPct  Int?
+  lastSeenAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  accountId String?
+  account   TuyaAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  filters       Filter[]
+  readings      Reading[]
+  notifications Notification[]
+}
+
+model Filter {
+  id              String   @id @default(cuid())
+  deviceId        String
+  device          Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  label           String   @default("Water filter")
+  limitGallons    Float    @default(1000)
+  /// Cumulative gallons reading at last filter change (the baseline).
+  /// gallonsUsed = latestCumulativeGallons - baselineGallons
+  baselineGallons Float    @default(0)
+  active          Boolean  @default(true)
+  installedAt     DateTime @default(now())
+  notifications   Notification[]
+
+  @@index([deviceId])
+}
+
+model Reading {
+  id                String   @id @default(cuid())
+  deviceId          String
+  device            Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  recordedAt        DateTime @default(now())
+  cumulativeRaw     Int // water_use_data raw value (units of 0.1 L)
+  cumulativeGallons Float
+  flowVelocityRaw   Int      @default(0) // flow_velocity raw value (0.1 L/min)
+  batteryPct        Int?
+  online            Boolean  @default(false)
+
+  @@index([deviceId, recordedAt])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  deviceId  String
+  device    Device           @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  filterId  String?
+  filter    Filter?          @relation(fields: [filterId], references: [id], onDelete: SetNull)
+  type      NotificationType
+  channel   String           @default("SMS")
+  message   String
+  sentTo    String?
+  status    String           @default("sent") // sent | failed | skipped
+  createdAt DateTime         @default(now())
+
+  @@index([deviceId])
+}
