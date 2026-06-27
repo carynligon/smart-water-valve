@@ -1,4 +1,4 @@
-# FlowGuard — Smart Water Filter Monitoring
+# Smart Water Filter Monitoring
 
 A dashboard for plumbers to monitor **Restmo BT smart water meters** (via Tuya)
 across commercial and residential customers, visualize water usage, set
@@ -33,10 +33,12 @@ Tuya Cloud API · Twilio · Tailwind CSS v4. Charts are dependency-free SVG.
    - `CRON_SECRET` — optional; protects the cron endpoint
 
 2. **Database**
+
    ```bash
    pnpm install          # also runs `prisma generate`
    pnpm db:migrate       # apply migrations (prisma migrate deploy)
    ```
+
    For a local DB: `createdb flowguard` then
    `DATABASE_URL="postgresql://<user>@localhost:5432/flowguard"`.
 
