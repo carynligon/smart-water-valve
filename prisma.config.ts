@@ -11,6 +11,9 @@ export default defineConfig({
     path: path.join("prisma", "migrations"),
   },
   datasource: {
-    url: process.env.DATABASE_URL ?? "",
+    // Migrations need a DIRECT (unpooled) connection — Neon's PgBouncer pooler
+    // can't hold the Postgres advisory lock migrate acquires (causes P1002).
+    // The runtime PrismaClient still uses the pooled DATABASE_URL (lib/prisma.ts).
+    url: process.env.DIRECT_URL ?? process.env.DATABASE_URL ?? "",
   },
 });

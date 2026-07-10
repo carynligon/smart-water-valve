@@ -60,6 +60,19 @@ export default function RootLayout({
         <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-8">
           {children}
         </main>
+        <footer className="border-t border-slate-200 bg-white">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-4 text-xs text-slate-500">
+            <span>© {new Date().getFullYear()} FlowGuard</span>
+            <nav className="flex items-center gap-4">
+              <Link href="/privacy" className="hover:text-slate-800">
+                Privacy Policy
+              </Link>
+              <Link href="/terms" className="hover:text-slate-800">
+                Terms &amp; Conditions
+              </Link>
+            </nav>
+          </div>
+        </footer>
       </body>
     </html>
   );

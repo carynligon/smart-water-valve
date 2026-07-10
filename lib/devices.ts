@@ -1,15 +1,7 @@
 import { prisma } from "./prisma";
 import { listUserDevices, getDeviceStatus } from "./tuya";
-import {
-  getValidAccessToken,
-  listUserDevicesOAuth,
-  getDeviceStatusOAuth,
-} from "./tuyaOAuth";
 import { rawToGallons } from "./units";
 import { sendSms } from "./sms";
-
-// Warn customers when a filter crosses this fraction of its limit.
-const WARN_THRESHOLD = 0.9;
 
 /**
  * Pull the device list for a linked Tuya account and upsert every device.
@@ -21,15 +13,7 @@ export async function syncAccountDevices(accountId: string): Promise<number> {
   });
   if (!account) throw new Error("Tuya account not found");
 
-  // OAuth-linked accounts read the owner's devices with their user token;
-  // legacy accounts fall back to cloud-project (client-credential) signing.
-  const devices = account.accessToken
-    ? await listUserDevicesOAuth(
-        account.uid,
-        await getValidAccessToken(account.id),
-        account.region,
-      )
-    : await listUserDevices(account.uid, account.region);
+  const devices = await listUserDevices(account.uid, account.region);
 
   for (const d of devices) {
     await prisma.device.upsert({
@@ -40,8 +24,6 @@ export async function syncAccountDevices(accountId: string): Promise<number> {
         productName: d.product_name,
         online: Boolean(d.online),
         accountId: account.id,
-        // Auto-assign to the account's owning customer, if set.
-        customerId: account.customerId ?? undefined,
       },
       update: {
         productName: d.product_name,
@@ -77,14 +59,7 @@ export async function pollDevice(deviceId: string) {
   if (!device) throw new Error("Device not found");
 
   const region = device.account?.region ?? "us";
-  const status =
-    device.account?.accessToken && device.accountId
-      ? await getDeviceStatusOAuth(
-          deviceId,
-          await getValidAccessToken(device.accountId),
-          region,
-        )
-      : await getDeviceStatus(deviceId, region);
+  const status = await getDeviceStatus(deviceId, region);
   const cumulativeGallons = rawToGallons(status.cumulativeRaw);
 
   await prisma.reading.create({
@@ -110,7 +85,6 @@ export async function pollDevice(deviceId: string) {
   const filter = device.filters[0];
   if (filter) {
     const used = Math.max(0, cumulativeGallons - filter.baselineGallons);
-    const ratio = filter.limitGallons > 0 ? used / filter.limitGallons : 0;
     await maybeNotify({
       deviceId: device.id,
       deviceName: device.name,
@@ -119,8 +93,8 @@ export async function pollDevice(deviceId: string) {
       filterId: filter.id,
       filterInstalledAt: filter.installedAt,
       limitGallons: filter.limitGallons,
+      warnGallonsRemaining: filter.warnGallonsRemaining,
       used,
-      ratio,
     });
   }
 
@@ -154,15 +128,16 @@ type NotifyInput = {
   filterId: string;
   filterInstalledAt: Date;
   limitGallons: number;
+  warnGallonsRemaining: number;
   used: number;
-  ratio: number;
 };
 
 async function maybeNotify(input: NotifyInput) {
+  const remaining = input.limitGallons - input.used;
   const type =
-    input.ratio >= 1
+    remaining <= 0
       ? "FILTER_DUE"
-      : input.ratio >= WARN_THRESHOLD
+      : remaining <= input.warnGallonsRemaining
         ? "FILTER_WARNING"
         : null;
   if (!type) return;
@@ -180,11 +155,11 @@ async function maybeNotify(input: NotifyInput) {
 
   const limit = Math.round(input.limitGallons);
   const usedR = Math.round(input.used);
-  const pct = Math.round(input.ratio * 100);
+  const remainingR = Math.max(0, Math.round(remaining));
   const message =
     type === "FILTER_DUE"
       ? `Water filter for ${input.customerName} has reached its ${limit} gallon limit (${usedR} gal used). Time to replace the filter.`
-      : `Heads up: the water filter for ${input.customerName} is at ${pct}% of its ${limit} gallon limit (${usedR} gal). Plan a replacement soon.`;
+      : `Heads up: the water filter for ${input.customerName} has about ${remainingR} gallon${remainingR === 1 ? "" : "s"} left before its ${limit} gallon limit (${usedR} gal used). Plan a replacement soon.`;
 
   const result = await sendSms(input.phone, message);
 

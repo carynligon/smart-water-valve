@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { syncAccountDevices, pollDevice } from "@/lib/devices";
+import { sendSms } from "@/lib/sms";
 import { rawToGallons } from "@/lib/units";
 
 function str(form: FormData, key: string): string {
@@ -45,23 +46,6 @@ export async function removeAccount(form: FormData) {
   refreshAll();
 }
 
-// ---- OAuth link invitations ---------------------------------------------
-
-export async function createLinkRequest(form: FormData) {
-  const label = str(form, "label") || "Smart Life account";
-  const region = str(form, "region") || "us";
-  const customerId = str(form, "customerId") || null;
-  await prisma.linkRequest.create({ data: { label, region, customerId } });
-  revalidatePath("/settings");
-}
-
-export async function deleteLinkRequest(form: FormData) {
-  const id = str(form, "id");
-  if (!id) return;
-  await prisma.linkRequest.delete({ where: { id } });
-  revalidatePath("/settings");
-}
-
 export async function syncAllAccounts() {
   const accounts = await prisma.tuyaAccount.findMany({ select: { id: true } });
   for (const a of accounts) {
@@ -77,6 +61,59 @@ export async function pollNow(form: FormData) {
   if (!deviceId) return;
   await pollDevice(deviceId);
   revalidatePath("/");
+  revalidatePath(`/devices/${deviceId}`);
+}
+
+/**
+ * Send a one-off test SMS to the device's customer right now, ignoring the
+ * threshold and de-dupe. Recorded with filterId=null so it never suppresses a
+ * real filter alert. Surfaces the send result (sent/failed/skipped) in the
+ * device's "Recent alerts" list.
+ */
+export async function sendTestAlert(form: FormData) {
+  const deviceId = str(form, "deviceId");
+  if (!deviceId) return;
+
+  const device = await prisma.device.findUnique({
+    where: { id: deviceId },
+    include: {
+      customer: true,
+      filters: { where: { active: true }, take: 1 },
+      readings: { orderBy: { recordedAt: "desc" }, take: 1 },
+    },
+  });
+  if (!device) throw new Error("Device not found");
+
+  const filter = device.filters[0];
+  const latest = device.readings[0];
+  const limit = filter?.limitGallons ?? 0;
+  const used =
+    filter && latest
+      ? Math.max(0, latest.cumulativeGallons - filter.baselineGallons)
+      : 0;
+  const remaining = Math.max(0, Math.round(limit - used));
+  const name = device.customer?.name ?? device.name;
+  const phone = device.customer?.contactPhone ?? "";
+
+  const message = `[Test] FlowGuard: the water filter for ${name} has about ${remaining} gallon${
+    remaining === 1 ? "" : "s"
+  } left before its ${Math.round(limit)} gallon limit (${Math.round(
+    used,
+  )} gal used). This is a test alert.`;
+
+  const result = await sendSms(phone, message);
+
+  await prisma.notification.create({
+    data: {
+      deviceId,
+      filterId: null, // test alert — excluded from real-alert de-dupe
+      type: "FILTER_WARNING",
+      message,
+      sentTo: phone || null,
+      status: result.status,
+    },
+  });
+
   revalidatePath(`/devices/${deviceId}`);
 }
 
@@ -103,12 +140,18 @@ export async function saveFilter(form: FormData) {
   const deviceId = str(form, "deviceId");
   const label = str(form, "label") || "Water filter";
   const limit = Number(str(form, "limitGallons"));
+  const warn = Number(str(form, "warnGallonsRemaining"));
   if (!filterId || !Number.isFinite(limit) || limit <= 0) {
     throw new Error("Enter a valid gallon limit greater than 0.");
   }
+  if (!Number.isFinite(warn) || warn < 0 || warn >= limit) {
+    throw new Error(
+      "Alert threshold must be between 0 and the replacement limit.",
+    );
+  }
   await prisma.filter.update({
     where: { id: filterId },
-    data: { label, limitGallons: limit },
+    data: { label, limitGallons: limit, warnGallonsRemaining: warn },
   });
   revalidatePath("/");
   if (deviceId) revalidatePath(`/devices/${deviceId}`);

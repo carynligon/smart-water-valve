@@ -9,12 +9,14 @@ export type FilterStatus = {
   state: FilterState;
 };
 
-const WARN_THRESHOLD = 0.9;
+// Fallback threshold when a filter doesn't specify one (gallons before limit).
+export const DEFAULT_WARN_GALLONS_REMAINING = 100;
 
 export function computeFilterStatus(
   latestCumulativeGallons: number | null,
   baselineGallons: number,
   limitGallons: number,
+  warnGallonsRemaining: number = DEFAULT_WARN_GALLONS_REMAINING,
 ): FilterStatus {
   if (latestCumulativeGallons == null) {
     return {
@@ -28,12 +30,19 @@ export function computeFilterStatus(
   }
   const used = Math.max(0, latestCumulativeGallons - baselineGallons);
   const ratio = limitGallons > 0 ? used / limitGallons : 0;
+  const remaining = Math.max(0, limitGallons - used);
+  // "due" once the limit is reached; "warning" once we're within the
+  // configured gallons-remaining threshold of it.
   const state: FilterState =
-    ratio >= 1 ? "due" : ratio >= WARN_THRESHOLD ? "warning" : "ok";
+    used >= limitGallons
+      ? "due"
+      : remaining <= warnGallonsRemaining
+        ? "warning"
+        : "ok";
   return {
     used,
     limit: limitGallons,
-    remaining: Math.max(0, limitGallons - used),
+    remaining,
     ratio,
     pct: Math.min(100, Math.round(ratio * 100)),
     state,

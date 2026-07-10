@@ -7,7 +7,13 @@ import { Battery, Card, OnlineDot, StateBadge, UsageBar } from "@/app/components
 import { SubmitButton } from "@/app/components/SubmitButton";
 import { LineChart, BarChart } from "@/app/components/charts";
 import { SetupNotice } from "@/app/components/SetupNotice";
-import { assignDevice, pollNow, resetFilter, saveFilter } from "@/app/actions";
+import {
+  assignDevice,
+  pollNow,
+  resetFilter,
+  saveFilter,
+  sendTestAlert,
+} from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +71,7 @@ export default async function DevicePage({
     latest?.cumulativeGallons ?? null,
     filter?.baselineGallons ?? 0,
     filter?.limitGallons ?? 0,
+    filter?.warnGallonsRemaining,
   );
 
   const linePoints = readings.map((r) => ({
@@ -166,7 +173,23 @@ export default async function DevicePage({
                   className={inputCls}
                 />
               </Field>
-              <SubmitButton pendingText="Saving…">Save limit</SubmitButton>
+              <Field label="Alert threshold (gallons before limit)">
+                <input
+                  name="warnGallonsRemaining"
+                  type="number"
+                  min={0}
+                  step={1}
+                  defaultValue={filter.warnGallonsRemaining}
+                  className={inputCls}
+                />
+                <span className="mt-1 block text-xs text-slate-400">
+                  e.g. 100 → alert the customer when {fmtGallons(
+                    Math.max(0, status.limit - filter.warnGallonsRemaining),
+                  )}{" "}
+                  of {fmtGallons(status.limit)} gal have been used.
+                </span>
+              </Field>
+              <SubmitButton pendingText="Saving…">Save settings</SubmitButton>
             </form>
 
             <div className="mt-5 border-t border-slate-100 pt-4">
@@ -231,9 +254,21 @@ export default async function DevicePage({
 
       {/* Notifications */}
       <Card>
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">
-          Recent alerts
-        </h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-slate-700">Recent alerts</h3>
+          <form action={sendTestAlert}>
+            <input type="hidden" name="deviceId" value={device.id} />
+            <SubmitButton variant="secondary" pendingText="Sending…">
+              Send test SMS
+            </SubmitButton>
+          </form>
+        </div>
+        {device.customer?.contactPhone ? null : (
+          <p className="mb-3 text-xs text-amber-600">
+            No contact phone on the assigned customer — a test will record as
+            “skipped”.
+          </p>
+        )}
         {device.notifications.length === 0 ? (
           <p className="text-sm text-slate-400">No alerts sent yet.</p>
         ) : (

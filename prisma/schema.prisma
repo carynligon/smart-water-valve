@@ -31,42 +31,17 @@ model TuyaAccount {
   tokenExpiresAt DateTime?
   createdAt      DateTime  @default(now())
   devices        Device[]
-
-  // When an account is linked on behalf of one customer (via an invite), the
-  // owning customer. Imported devices are auto-assigned to them.
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  linkRequests LinkRequest[]
-}
-
-/// A per-customer invitation to link a Smart Life account via OAuth. Its `id`
-/// is passed to Tuya as the OAuth `state` and echoed back to our callback.
-model LinkRequest {
-  id         String       @id @default(cuid())
-  label      String       @default("Smart Life account")
-  region     String       @default("us")
-  status     String       @default("pending") // pending | linked | error
-  error      String?
-  customerId String?
-  customer   Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  accountId  String?
-  account    TuyaAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  createdAt  DateTime     @default(now())
-  linkedAt   DateTime?
 }
 
 model Customer {
-  id           String        @id @default(cuid())
+  id           String      @id @default(cuid())
   name         String
-  type         ServiceType   @default(RESIDENTIAL)
+  type         ServiceType @default(RESIDENTIAL)
   address      String?
   contactName  String?
   contactPhone String? // E.164 for SMS, e.g. +14155551234
-  createdAt    DateTime      @default(now())
+  createdAt    DateTime    @default(now())
   devices      Device[]
-  tuyaAccounts TuyaAccount[]
-  linkRequests LinkRequest[]
 }
 
 model Device {
@@ -94,7 +69,11 @@ model Filter {
   deviceId        String
   device          Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
   label           String   @default("Water filter")
+  /// Replace-the-filter limit: total gallons this filter may pass before it's "due".
   limitGallons    Float    @default(1000)
+  /// Warn when the filter has this many (or fewer) gallons left before the limit.
+  /// e.g. 100 => alert once usage reaches limitGallons - 100.
+  warnGallonsRemaining Float @default(100)
   /// Cumulative gallons reading at last filter change (the baseline).
   /// gallonsUsed = latestCumulativeGallons - baselineGallons
   baselineGallons Float    @default(0)

@@ -47,6 +47,7 @@ export default async function Dashboard() {
       latest?.cumulativeGallons ?? null,
       filter?.baselineGallons ?? 0,
       filter?.limitGallons ?? 0,
+      filter?.warnGallonsRemaining,
     );
     return { device: d, filter, latest, status };
   });
