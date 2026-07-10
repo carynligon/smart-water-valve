@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { TUYA_REGIONS } from "@/lib/tuya";
 import { isSmsConfigured } from "@/lib/sms";
+import { isEmailConfigured } from "@/lib/email";
 import { Card } from "@/app/components/ui";
 import { SubmitButton } from "@/app/components/SubmitButton";
 import { SetupNotice } from "@/app/components/SetupNotice";
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
     process.env.TUYA_ACCESS_KEY && process.env.TUYA_SECRET_KEY,
   );
   const smsConfigured = isSmsConfigured();
+  const emailConfigured = isEmailConfigured();
 
   return (
     <div className="space-y-6">
@@ -40,7 +42,7 @@ export default async function SettingsPage() {
         </p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <ConfigStatus
           label="Tuya Cloud API"
           ok={tuyaConfigured}
@@ -52,6 +54,12 @@ export default async function SettingsPage() {
           ok={smsConfigured}
           okText="Enabled"
           badText="Set TWILIO_* env vars to send texts"
+        />
+        <ConfigStatus
+          label="Email alerts"
+          ok={emailConfigured}
+          okText="Enabled"
+          badText="Set RESEND_API_KEY / EMAIL_FROM"
         />
       </div>
 

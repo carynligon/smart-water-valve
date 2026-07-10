@@ -81,6 +81,15 @@ export default async function DevicePage({
   const bars = dailyUsage(readings);
   const flowGpm = latest ? rawFlowToGpm(latest.flowVelocityRaw) : 0;
 
+  const alertChannel = device.customer?.alertChannel ?? "SMS";
+  const testWarning = !device.customer
+    ? "No customer assigned — a test alert will record as “skipped”."
+    : alertChannel !== "EMAIL" && !device.customer.contactPhone
+      ? "No contact phone — the SMS test will record as “skipped”."
+      : alertChannel !== "SMS" && !device.customer.contactEmail
+        ? "No contact email — the email test will record as “skipped”."
+        : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -259,16 +268,13 @@ export default async function DevicePage({
           <form action={sendTestAlert}>
             <input type="hidden" name="deviceId" value={device.id} />
             <SubmitButton variant="secondary" pendingText="Sending…">
-              Send test SMS
+              Send test alert
             </SubmitButton>
           </form>
         </div>
-        {device.customer?.contactPhone ? null : (
-          <p className="mb-3 text-xs text-amber-600">
-            No contact phone on the assigned customer — a test will record as
-            “skipped”.
-          </p>
-        )}
+        {testWarning ? (
+          <p className="mb-3 text-xs text-amber-600">{testWarning}</p>
+        ) : null}
         {device.notifications.length === 0 ? (
           <p className="text-sm text-slate-400">No alerts sent yet.</p>
         ) : (
@@ -280,7 +286,7 @@ export default async function DevicePage({
               >
                 <span className="text-slate-700">{n.message}</span>
                 <span className="whitespace-nowrap text-xs text-slate-400">
-                  {n.status} · {n.createdAt.toLocaleDateString()}
+                  {n.channel} · {n.status} · {n.createdAt.toLocaleDateString()}
                 </span>
               </li>
             ))}

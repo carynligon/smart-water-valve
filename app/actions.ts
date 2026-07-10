@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { syncAccountDevices, pollDevice } from "@/lib/devices";
-import { sendSms } from "@/lib/sms";
+import { deliverAlert, type AlertChannel } from "@/lib/notify";
 import { rawToGallons } from "@/lib/units";
 
 function str(form: FormData, key: string): string {
@@ -93,7 +93,6 @@ export async function sendTestAlert(form: FormData) {
       : 0;
   const remaining = Math.max(0, Math.round(limit - used));
   const name = device.customer?.name ?? device.name;
-  const phone = device.customer?.contactPhone ?? "";
 
   const message = `[Test] FlowGuard: the water filter for ${name} has about ${remaining} gallon${
     remaining === 1 ? "" : "s"
@@ -101,17 +100,17 @@ export async function sendTestAlert(form: FormData) {
     used,
   )} gal used). This is a test alert.`;
 
-  const result = await sendSms(phone, message);
-
-  await prisma.notification.create({
-    data: {
-      deviceId,
-      filterId: null, // test alert — excluded from real-alert de-dupe
-      type: "FILTER_WARNING",
-      message,
-      sentTo: phone || null,
-      status: result.status,
-    },
+  // Sends over the customer's chosen channel(s); filterId=null keeps it out of
+  // the real-alert de-dupe. deliverAlert records the Notification row(s).
+  await deliverAlert({
+    deviceId,
+    filterId: null,
+    type: "FILTER_WARNING",
+    subject: "FlowGuard: test alert",
+    message,
+    phone: device.customer?.contactPhone ?? "",
+    email: device.customer?.contactEmail ?? "",
+    channel: device.customer?.alertChannel ?? "SMS",
   });
 
   revalidatePath(`/devices/${deviceId}`);
@@ -191,7 +190,18 @@ export async function saveCustomer(form: FormData) {
   const address = str(form, "address");
   const contactName = str(form, "contactName");
   const contactPhone = str(form, "contactPhone");
+  const contactEmail = str(form, "contactEmail");
+  const channelRaw = str(form, "alertChannel");
+  const alertChannel: AlertChannel = (
+    ["SMS", "EMAIL", "BOTH"].includes(channelRaw) ? channelRaw : "SMS"
+  ) as AlertChannel;
   if (!name) throw new Error("Customer name is required.");
+  if ((alertChannel === "EMAIL" || alertChannel === "BOTH") && !contactEmail) {
+    throw new Error("An email address is required for email alerts.");
+  }
+  if ((alertChannel === "SMS" || alertChannel === "BOTH") && !contactPhone) {
+    throw new Error("A contact phone is required for SMS alerts.");
+  }
 
   const data = {
     name,
@@ -199,6 +209,8 @@ export async function saveCustomer(form: FormData) {
     address: address || null,
     contactName: contactName || null,
     contactPhone: contactPhone || null,
+    contactEmail: contactEmail || null,
+    alertChannel,
   };
 
   if (id) {

@@ -1,7 +1,7 @@
 import { prisma } from "./prisma";
 import { listUserDevices, getDeviceStatus } from "./tuya";
 import { rawToGallons } from "./units";
-import { sendSms } from "./sms";
+import { deliverAlert, type AlertChannel } from "./notify";
 
 /**
  * Pull the device list for a linked Tuya account and upsert every device.
@@ -87,9 +87,10 @@ export async function pollDevice(deviceId: string) {
     const used = Math.max(0, cumulativeGallons - filter.baselineGallons);
     await maybeNotify({
       deviceId: device.id,
-      deviceName: device.name,
       customerName: device.customer?.name ?? device.name,
       phone: device.customer?.contactPhone ?? "",
+      email: device.customer?.contactEmail ?? "",
+      alertChannel: device.customer?.alertChannel ?? "SMS",
       filterId: filter.id,
       filterInstalledAt: filter.installedAt,
       limitGallons: filter.limitGallons,
@@ -122,9 +123,10 @@ export async function pollAllDevices() {
 
 type NotifyInput = {
   deviceId: string;
-  deviceName: string;
   customerName: string;
   phone: string;
+  email: string;
+  alertChannel: AlertChannel;
   filterId: string;
   filterInstalledAt: Date;
   limitGallons: number;
@@ -160,17 +162,19 @@ async function maybeNotify(input: NotifyInput) {
     type === "FILTER_DUE"
       ? `Water filter for ${input.customerName} has reached its ${limit} gallon limit (${usedR} gal used). Time to replace the filter.`
       : `Heads up: the water filter for ${input.customerName} has about ${remainingR} gallon${remainingR === 1 ? "" : "s"} left before its ${limit} gallon limit (${usedR} gal used). Plan a replacement soon.`;
+  const subject =
+    type === "FILTER_DUE"
+      ? "FlowGuard: water filter replacement due"
+      : "FlowGuard: water filter replacement coming up";
 
-  const result = await sendSms(input.phone, message);
-
-  await prisma.notification.create({
-    data: {
-      deviceId: input.deviceId,
-      filterId: input.filterId,
-      type,
-      message,
-      sentTo: input.phone || null,
-      status: result.status,
-    },
+  await deliverAlert({
+    deviceId: input.deviceId,
+    filterId: input.filterId,
+    type,
+    subject,
+    message,
+    phone: input.phone,
+    email: input.email,
+    channel: input.alertChannel,
   });
 }

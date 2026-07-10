@@ -92,6 +92,8 @@ function CustomerForm({
     address: string | null;
     contactName: string | null;
     contactPhone: string | null;
+    contactEmail: string | null;
+    alertChannel: "SMS" | "EMAIL" | "BOTH";
   };
 }) {
   return (
@@ -156,6 +158,32 @@ function CustomerForm({
           />
         </label>
       </div>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-600">
+          Contact email
+        </span>
+        <input
+          name="contactEmail"
+          type="email"
+          placeholder="name@example.com"
+          defaultValue={customer?.contactEmail ?? ""}
+          className={inputCls}
+        />
+      </label>
+      <label className="block">
+        <span className="mb-1 block text-xs font-medium text-slate-600">
+          Alert delivery
+        </span>
+        <select
+          name="alertChannel"
+          defaultValue={customer?.alertChannel ?? "SMS"}
+          className={inputCls}
+        >
+          <option value="SMS">SMS only</option>
+          <option value="EMAIL">Email only</option>
+          <option value="BOTH">SMS &amp; email</option>
+        </select>
+      </label>
       <SubmitButton pendingText="Saving…">
         {customer ? "Save changes" : "Add customer"}
       </SubmitButton>

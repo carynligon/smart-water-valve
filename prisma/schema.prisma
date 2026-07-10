@@ -19,6 +19,12 @@ enum NotificationType {
   FILTER_WARNING
 }
 
+enum AlertChannel {
+  SMS
+  EMAIL
+  BOTH
+}
+
 /// A linked Tuya / Smart Life account. The Cloud Project access/secret keys
 /// live in env vars (one cloud project); each account is a linked app-account UID.
 model TuyaAccount {
@@ -40,6 +46,8 @@ model Customer {
   address      String?
   contactName  String?
   contactPhone String? // E.164 for SMS, e.g. +14155551234
+  contactEmail String?
+  alertChannel AlertChannel @default(SMS) // how this customer receives alerts
   createdAt    DateTime    @default(now())
   devices      Device[]
 }
