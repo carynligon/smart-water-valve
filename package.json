@@ -8,9 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
-    "db:studio": "prisma studio",
+    "db:migrate": "node --env-file=.env node_modules/prisma/build/index.js migrate deploy",
+    "db:migrate:dev": "node --env-file=.env node_modules/prisma/build/index.js migrate dev",
+    "db:studio": "node --env-file=.env node_modules/prisma/build/index.js studio",
     "devices": "tsx --env-file=.env scripts/getDevices.ts"
   },
   "dependencies": {
@@ -19,6 +19,7 @@
     "@tuya/tuya-connector-nodejs": "^2.1.2",
     "next": "16.2.9",
     "pg": "^8.22.0",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "twilio": "^6.0.2"
@@ -27,6 +28,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

@@ -1,5 +1,10 @@
 import { prisma } from "./prisma";
 import { listUserDevices, getDeviceStatus } from "./tuya";
+import {
+  getValidAccessToken,
+  listUserDevicesOAuth,
+  getDeviceStatusOAuth,
+} from "./tuyaOAuth";
 import { rawToGallons } from "./units";
 import { sendSms } from "./sms";
 
@@ -16,7 +21,15 @@ export async function syncAccountDevices(accountId: string): Promise<number> {
   });
   if (!account) throw new Error("Tuya account not found");
 
-  const devices = await listUserDevices(account.uid, account.region);
+  // OAuth-linked accounts read the owner's devices with their user token;
+  // legacy accounts fall back to cloud-project (client-credential) signing.
+  const devices = account.accessToken
+    ? await listUserDevicesOAuth(
+        account.uid,
+        await getValidAccessToken(account.id),
+        account.region,
+      )
+    : await listUserDevices(account.uid, account.region);
 
   for (const d of devices) {
     await prisma.device.upsert({
@@ -27,6 +40,8 @@ export async function syncAccountDevices(accountId: string): Promise<number> {
         productName: d.product_name,
         online: Boolean(d.online),
         accountId: account.id,
+        // Auto-assign to the account's owning customer, if set.
+        customerId: account.customerId ?? undefined,
       },
       update: {
         productName: d.product_name,
@@ -62,7 +77,14 @@ export async function pollDevice(deviceId: string) {
   if (!device) throw new Error("Device not found");
 
   const region = device.account?.region ?? "us";
-  const status = await getDeviceStatus(deviceId, region);
+  const status =
+    device.account?.accessToken && device.accountId
+      ? await getDeviceStatusOAuth(
+          deviceId,
+          await getValidAccessToken(device.accountId),
+          region,
+        )
+      : await getDeviceStatus(deviceId, region);
   const cumulativeGallons = rawToGallons(status.cumulativeRaw);
 
   await prisma.reading.create({

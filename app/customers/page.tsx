@@ -24,6 +24,7 @@ export default async function CustomersPage() {
     return <SetupNotice error={e instanceof Error ? e.message : String(e)} />;
   }
 
+
   return (
     <div className="space-y-6">
       <div>

@@ -45,6 +45,23 @@ export async function removeAccount(form: FormData) {
   refreshAll();
 }
 
+// ---- OAuth link invitations ---------------------------------------------
+
+export async function createLinkRequest(form: FormData) {
+  const label = str(form, "label") || "Smart Life account";
+  const region = str(form, "region") || "us";
+  const customerId = str(form, "customerId") || null;
+  await prisma.linkRequest.create({ data: { label, region, customerId } });
+  revalidatePath("/settings");
+}
+
+export async function deleteLinkRequest(form: FormData) {
+  const id = str(form, "id");
+  if (!id) return;
+  await prisma.linkRequest.delete({ where: { id } });
+  revalidatePath("/settings");
+}
+
 export async function syncAllAccounts() {
   const accounts = await prisma.tuyaAccount.findMany({ select: { id: true } });
   for (const a of accounts) {
